@@ -1,4 +1,4 @@
-use crate::ship::{ prelude::*, childship::State };
+use crate::ship::{prelude::*, ships::State};
 
 use bevy::{
     input::{keyboard::KeyCode, Input},
@@ -10,7 +10,7 @@ pub struct ShipTexture(Handle<Image>);
 
 #[derive(Component)]
 pub struct Ship {
-    speed: Vec2,
+    pub speed: Vec2,
 }
 
 pub struct ShipPlugin;

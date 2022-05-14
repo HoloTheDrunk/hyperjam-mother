@@ -1,9 +1,12 @@
-mod childship;
-mod mothership;
-mod ship;
+mod baseship;
+pub mod boids;
+mod ships;
 
-pub use ship::ShipPlugin;
+pub use baseship::ShipPlugin;
 
 pub mod prelude {
-    pub use super::{childship::Childship, mothership::Mothership, ship::Ship};
+    pub use super::{
+        baseship::Ship,
+        ships::{Childship, Mothership},
+    };
 }
