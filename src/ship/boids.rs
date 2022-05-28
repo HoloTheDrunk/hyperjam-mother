@@ -7,6 +7,18 @@ pub struct BoidSystem {
     separation_settings: BoidSystemSetting,
     alignment_settings: BoidSystemSetting,
     cohesion_settings: BoidSystemSetting,
+    field_of_view: f32,
+}
+
+impl Default for BoidSystem {
+    fn default() -> Self {
+        BoidSystem {
+            separation_settings: BoidSystemSetting::default(),
+            alignment_settings: BoidSystemSetting::default(),
+            cohesion_settings: BoidSystemSetting::default(),
+            field_of_view: 0.75,
+        }
+    }
 }
 
 pub struct BoidSystemSetting {
@@ -14,7 +26,16 @@ pub struct BoidSystemSetting {
     force: f32,
 }
 
-pub fn separation(
+impl Default for BoidSystemSetting {
+    fn default() -> Self {
+        BoidSystemSetting {
+            range: 100.,
+            force: 1.,
+        }
+    }
+}
+
+fn separation(
     system: Res<BoidSystem>,
     time: Res<Time>,
     mut query: Query<(&Transform, &mut Ship), With<Childship>>,
@@ -40,7 +61,7 @@ pub fn separation(
     }
 }
 
-pub fn alignment(
+fn alignment(
     system: Res<BoidSystem>,
     time: Res<Time>,
     mut query: Query<(Entity, &Transform, &mut Ship), With<Childship>>,
@@ -50,7 +71,7 @@ pub fn alignment(
     let mut adjustments = HashMap::<Entity, (usize, Vec2)>::new();
 
     let mut combinations = query.iter_combinations_mut();
-    while let Some([(a_entity, a_transform, _), (_, b_transform, b_ship)]) =
+    while let Some([(a_entity, a_transform, a_ship), (_, b_transform, b_ship)]) =
         combinations.fetch_next()
     {
         if a_transform
@@ -71,5 +92,14 @@ pub fn alignment(
             ship.speed +=
                 (*speed / *count as f32) * time.delta_seconds() * system.alignment_settings.force;
         }
+    }
+}
+
+pub struct BoidPlugin;
+impl Plugin for BoidPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(BoidSystem::default())
+            .add_system(separation)
+            .add_system(alignment);
     }
 }
