@@ -50,6 +50,7 @@ fn separation(
             .translation
             .distance_squared(b_transform.translation)
             < range_squared
+            && a_ship.speed.dot(b_ship.speed) > -system.field_of_view
         {
             let a_to_b = (b_transform.translation - a_transform.translation)
                 .truncate()
@@ -78,6 +79,7 @@ fn alignment(
             .translation
             .distance_squared(b_transform.translation)
             < range_squared
+            && a_ship.speed.dot(b_ship.speed) > -system.field_of_view
         {
             let (ref mut count, ref mut total) =
                 adjustments.entry(a_entity).or_insert((0, Vec2::ZERO));
