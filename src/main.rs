@@ -1,5 +1,5 @@
 mod ship;
-use ship::ShipPlugin;
+use ship::{BoidPlugin, ShipPlugin};
 
 use bevy::{asset::AssetServerSettings, prelude::*};
 
@@ -13,6 +13,7 @@ fn main() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(ShipPlugin)
+        .add_plugin(BoidPlugin)
         .add_startup_system(setup)
         .run();
 }

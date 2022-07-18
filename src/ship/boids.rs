@@ -1,4 +1,7 @@
-use crate::ship::prelude::*;
+use crate::ship::{
+    prelude::*,
+    ships::{State, Target},
+};
 use bevy::prelude::*;
 
 use std::collections::HashMap;
@@ -7,15 +10,17 @@ pub struct BoidSystem {
     separation_settings: BoidSystemSetting,
     alignment_settings: BoidSystemSetting,
     cohesion_settings: BoidSystemSetting,
+    follow_settings: BoidSystemSetting,
     field_of_view: f32,
 }
 
 impl Default for BoidSystem {
     fn default() -> Self {
         BoidSystem {
-            separation_settings: BoidSystemSetting::default(),
-            alignment_settings: BoidSystemSetting::default(),
-            cohesion_settings: BoidSystemSetting::default(),
+            separation_settings: BoidSystemSetting { range: 200., force: 10_000. },
+            alignment_settings: BoidSystemSetting { range: 300., force: 5_000. },
+            cohesion_settings: BoidSystemSetting { range: 300., force: 5_000. },
+            follow_settings: BoidSystemSetting { range: 100., force: 10_000. },
             field_of_view: 0.75,
         }
     }
@@ -29,8 +34,8 @@ pub struct BoidSystemSetting {
 impl Default for BoidSystemSetting {
     fn default() -> Self {
         BoidSystemSetting {
-            range: 100.,
-            force: 1.,
+            range: 500.,
+            force: 10.,
         }
     }
 }
@@ -67,8 +72,6 @@ fn alignment(
     time: Res<Time>,
     mut query: Query<(Entity, &Transform, &mut Ship), With<Childship>>,
 ) {
-    let range_squared = system.alignment_settings.range * system.alignment_settings.range;
-
     let mut adjustments = HashMap::<Entity, (usize, Vec2)>::new();
 
     let mut combinations = query.iter_combinations_mut();
@@ -77,8 +80,8 @@ fn alignment(
     {
         if a_transform
             .translation
-            .distance_squared(b_transform.translation)
-            < range_squared
+            .distance(b_transform.translation)
+            < system.alignment_settings.range
             && a_ship.speed.dot(b_ship.speed) > -system.field_of_view
         {
             let (ref mut count, ref mut total) =
@@ -102,8 +105,6 @@ fn cohesion(
     time: Res<Time>,
     mut query: Query<(Entity, &Transform, &mut Ship), With<Childship>>,
 ) {
-    let range_squared = system.cohesion_settings.range * system.cohesion_settings.range;
-
     // Center of mass of the nearby boids of every boid.
     let mut com = HashMap::<Entity, (usize, Vec2)>::new();
 
@@ -113,8 +114,8 @@ fn cohesion(
     {
         if a_transform
             .translation
-            .distance_squared(b_transform.translation)
-            < range_squared
+            .distance(b_transform.translation)
+            < system.cohesion_settings.range
             && a_ship.speed.dot(b_ship.speed) > -system.field_of_view
         {
             let (ref mut count, ref mut total) = com.entry(a_entity).or_insert((0, Vec2::ZERO));
@@ -133,12 +134,78 @@ fn cohesion(
     }
 }
 
+fn follow(
+    // mut world: ResMut<World>,
+    mut commands: Commands,
+    system: Res<BoidSystem>,
+    time: Res<Time>,
+    mut query: Query<(Entity, &Transform, &mut Ship, &mut Childship)>,
+    mut targets: Query<(Entity, &Transform, &mut Target)>,
+) {
+    for (entity, transform, mut ship, mut childship) in query.iter_mut() {
+        match childship.state {
+            State::Idle => {
+                if let Ok(mother_transform) = targets.get_component::<Transform>(childship.mother) {
+                    let distance = transform.translation.distance(mother_transform.translation);
+                    if distance > system.follow_settings.range {
+                        ship.speed += ((mother_transform.translation - transform.translation)
+                            / distance)
+                            .truncate()
+                            * time.delta_seconds()
+                            * system.follow_settings.force;
+                    } else {
+                        ship.speed *= 1. - 0.1 * time.delta_seconds();
+                    }
+                } else {
+                    eprintln!(
+                        "Couldn't find Transform for Mothership {:?} in `boids::follow`, deleting {:?}",
+                        childship.mother, entity
+                    );
+                    commands.entity(entity).despawn();
+                    if let Ok(mut target) = targets.get_component_mut::<Target>(childship.mother) {
+                        target.count -= 1;
+                        if target.count == 0 {
+                            commands.entity(childship.mother).remove::<Target>();
+                        }
+                    }
+                }
+            }
+            State::Gathering { target, progress } => {
+                if let Ok(target_transform) = targets.get_component::<Transform>(target) {
+                    let distance = transform.translation.distance(target_transform.translation);
+                    if distance > system.follow_settings.range {
+                        ship.speed += ((target_transform.translation - transform.translation)
+                            / distance)
+                            .truncate()
+                            * time.delta_seconds()
+                            * system.follow_settings.force;
+                    } else if progress > 100. {
+                        childship.state = State::Idle;
+                    } else {
+                        childship.state = State::Gathering {
+                            target,
+                            progress: progress + time.delta_seconds(),
+                        };
+                    }
+                } else {
+                    childship.state = State::Idle;
+                }
+            }
+        }
+    }
+}
+
 pub struct BoidPlugin;
 impl Plugin for BoidPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(BoidSystem::default())
-            .add_system(separation)
-            .add_system(alignment)
-            .add_system(cohesion);
+            .add_system_set(
+                SystemSet::new()
+                    .label("boid_logic")
+                    .with_system(separation)
+                    .with_system(alignment)
+                    .with_system(cohesion),
+            )
+            .add_system(follow/*.before("boid_logic")*/);
     }
 }
